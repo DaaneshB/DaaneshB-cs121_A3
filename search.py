@@ -2,9 +2,12 @@ import json
 import nltk
 from nltk.tokenize import word_tokenize
 from nltk.stem import PorterStemmer
+import time
 
 # Download the necessary NLTK data (if not already downloaded)
 nltk.download('punkt')
+
+
 
 def nltk_tokenize(text: str):
     """Tokenizes text into lowercase alphanumeric tokens."""
@@ -64,11 +67,10 @@ def main():
             break
         
         matching_docs, scores = boolean_search(index, query)
-        
         if matching_docs:
             # Rank the documents by their accumulated score (higher is better)
             ranked_docs = sorted(matching_docs, key=lambda doc: scores[doc], reverse=True)
-            print(f"\nFound {len(ranked_docs)} matching document(s). Top results:")
+            print(f"\nFound {len(ranked_docs)} matching document(s): Top results:")
             for doc in ranked_docs[:5]:  # show top 5 results
                 print(f"Document: {doc}, Score: {scores[doc]}")
         else:
