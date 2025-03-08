@@ -65,7 +65,7 @@ def build_index():
     
     # Build partial indexes (adjust chunk_size as needed)
     print("Building partial indexes...")
-    indexer.build_index_from_corpus(corpus_directory, partial_chunk_size=100)
+    indexer.build_index_from_corpus(corpus_directory, partial_chunk_size=1000)
     
     # Get list of created partial index files
     partial_files = [
