@@ -1,5 +1,8 @@
+import os
 import time
+from inverted_index import InvertedIndex
 import search
+from merge import merge_partial_indexes
 
 good_queries = [
     "machine learning",
@@ -44,11 +47,50 @@ def search_helper(index, query):
         for doc in ranked_docs[:5]:  # show top 5 results
             print(f"Document: {doc}, Score: {scores[doc]}")
     else:
+        print(f"\nQuery: '{query}'")
         print("No documents found for the given query.")
+
+def build_index():
+    """
+    Builds the index using partial indexing and merging.
+    Returns the path to the final merged index file.
+    """
+    start_time = time.time()
+    
+    # Initialize indexer
+    indexer = InvertedIndex()
+    
+    # Set your corpus directory path
+    corpus_directory = "C:\\Users\\DanBo\\Downloads\\developer\\DEV"
+    
+    # Build partial indexes (adjust chunk_size as needed)
+    print("Building partial indexes...")
+    indexer.build_index_from_corpus(corpus_directory, partial_chunk_size=100)
+    
+    # Get list of created partial index files
+    partial_files = [
+        f for f in os.listdir('.')
+        if f.startswith("partial_index_") and f.endswith(".txt")
+    ]
+    
+    # Merge partial indexes
+    print("\nMerging partial indexes...")
+    final_index_file = "final_index.txt"
+    merge_partial_indexes(partial_files, final_index_file)
+    
+    # Optional: Remove partial index files after merging
+    for partial_file in partial_files:
+        os.remove(partial_file)
+        print(f"Removed partial file: {partial_file}")
+    
+    end_time = time.time()
+    print(f"\nIndex building and merging completed in {end_time - start_time:.2f} seconds")
+    
+    return final_index_file
 
 def main():
     start = time.time()
-    index_file = "inverted_index_nltk.json"
+    index_file = build_index()
     index = search.load_index(index_file)
     print("Inverted index loaded successfully.")
     end = time.time()

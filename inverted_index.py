@@ -31,6 +31,63 @@ class InvertedIndex:
         self.num_documents = 0
         self.stemmer = PorterStemmer()
 
+    def _write_partial_index(self, filename: str):
+        """
+        Writes current in-memory index to a text file.
+        Format: token|doc1:freq1,doc2:freq2,...
+        """
+        with open(filename, 'w', encoding='utf-8') as f:
+            for token, postings in self.index.items():
+                postings_str = ','.join(f"{doc_id}:{freq}" for doc_id, freq in postings)
+                f.write(f"{token}|{postings_str}\n")
+        print(f"Partial index written to {filename}")
+    
+    def build_index_from_corpus(self, top_level_directory: str, partial_chunk_size: int = 1000):
+        """
+        Builds index by processing documents in chunks and writing partial indexes.
+        Args:
+            top_level_directory: Path to corpus directory
+            partial_chunk_size: Number of documents to process before writing partial index
+        """
+        print(f"Building index from corpus in directory: {top_level_directory}")
+        current_chunk_count = 0
+        partial_counter = 0
+
+        for domain_folder in os.listdir(top_level_directory):
+            domain_path = os.path.join(top_level_directory, domain_folder)
+            if not os.path.isdir(domain_path):
+                continue
+                
+            print(f"Processing domain folder: {domain_folder}")
+            
+            for filename in os.listdir(domain_path):
+                if not filename.endswith('.json'):
+                    continue
+                    
+                file_path = os.path.join(domain_path, filename)
+                print(f"Indexing file: {file_path}")
+                self._process_json_file(file_path)
+                current_chunk_count += 1
+
+                # Check if chunk size reached
+                if current_chunk_count >= partial_chunk_size:
+                    partial_counter += 1
+                    partial_filename = f"partial_index_{partial_counter}.txt"
+                    print(f"Creating partial index {partial_counter} with {current_chunk_count} documents")
+                    self._write_partial_index(partial_filename)
+                    self.index = {}
+                    current_chunk_count = 0
+
+        # Handle any remaining documents
+        if current_chunk_count > 0:
+            partial_counter += 1
+            partial_filename = f"partial_index_{partial_counter}.txt"
+            print(f"Creating final partial index with {current_chunk_count} documents")
+            self._write_partial_index(partial_filename)
+            self.index = {}
+
+        print(f"Indexing complete. Created {partial_counter} partial indexes.")
+
     def index_document(self, doc_id: str, html_content: str):
         """
         Extracts visible text from the HTML content, tokenizes, stems, and updates the inverted index.
@@ -63,24 +120,6 @@ class InvertedIndex:
         self.num_documents += 1
         print(f"Indexed document {doc_id} with {len(term_freq)} unique tokens.")
 
-    def build_index_from_corpus(self, top_level_directory: str):
-        """
-        Recursively iterates over each domain folder inside 'top_level_directory'.
-        For each JSON file, extracts the 'content' field and indexes it.
-        """
-        print(f"Building index from corpus in directory: {top_level_directory}")
-        # Loop through each domain folder
-        for domain_folder in os.listdir(top_level_directory):
-            domain_path = os.path.join(top_level_directory, domain_folder)
-            if os.path.isdir(domain_path):
-                print(f"Processing domain folder: {domain_folder}")
-                # Each domain folder contains multiple JSON files
-                for filename in os.listdir(domain_path):
-                    if filename.endswith('.json'):
-                        file_path = os.path.join(domain_path, filename)
-                        print(f"Indexing file: {file_path}")
-                        self._process_json_file(file_path)
-        print("Finished processing all domain folders.")
 
     def _process_json_file(self, file_path: str):
         """
