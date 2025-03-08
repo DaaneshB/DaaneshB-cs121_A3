@@ -34,20 +34,36 @@ class InvertedIndex:
     def _write_partial_index(self, filename: str):
         """
         Writes current in-memory index to a text file.
-        Format: token|doc1:freq1,doc2:freq2,...
+        Format: token|doc_id1:freq1,doc_id2:freq2,...
+        Ensures proper URL encoding
         """
-        with open(filename, 'w', encoding='utf-8') as f:
-            for token, postings in self.index.items():
-                postings_str = ','.join(f"{doc_id}:{freq}" for doc_id, freq in postings)
-                f.write(f"{token}|{postings_str}\n")
-        print(f"Partial index written to {filename}")
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                for token, postings in self.index.items():
+                    if not postings:
+                        continue
+                    
+                    # Create postings string with proper URL handling
+                    valid_postings = []
+                    for doc_id, freq in postings:
+                        if doc_id and freq > 0:
+                            # Encode the URL if it contains special characters
+                            safe_doc_id = doc_id.replace(':', '%3A')
+                            valid_postings.append(f"{safe_doc_id}:{freq}")
+                    
+                    if valid_postings:
+                        postings_str = ','.join(valid_postings)
+                        f.write(f"{token}|{postings_str}\n")
+                        
+        except Exception as e:
+            print(f"Error writing partial index {filename}: {e}")
+                        
+        except Exception as e:
+            print(f"Error writing partial index {filename}: {e}")
     
-    def build_index_from_corpus(self, top_level_directory: str, partial_chunk_size: int = 1000):
+    def build_index_from_corpus(self, top_level_directory: str, partial_chunk_size: int = 100):
         """
-        Builds index by processing documents in chunks and writing partial indexes.
-        Args:
-            top_level_directory: Path to corpus directory
-            partial_chunk_size: Number of documents to process before writing partial index
+        Builds index by processing JSON files and writing partial indexes as txt files.
         """
         print(f"Building index from corpus in directory: {top_level_directory}")
         current_chunk_count = 0
@@ -61,24 +77,21 @@ class InvertedIndex:
             print(f"Processing domain folder: {domain_folder}")
             
             for filename in os.listdir(domain_path):
-                if not filename.endswith('.json'):
-                    continue
-                    
-                file_path = os.path.join(domain_path, filename)
-                print(f"Indexing file: {file_path}")
-                self._process_json_file(file_path)
-                current_chunk_count += 1
+                if filename.endswith('.json'):  # Keep looking for JSON files
+                    file_path = os.path.join(domain_path, filename)
+                    print(f"Indexing file: {file_path}")
+                    self._process_json_file(file_path)
+                    current_chunk_count += 1
 
-                # Check if chunk size reached
-                if current_chunk_count >= partial_chunk_size:
-                    partial_counter += 1
-                    partial_filename = f"partial_index_{partial_counter}.txt"
-                    print(f"Creating partial index {partial_counter} with {current_chunk_count} documents")
-                    self._write_partial_index(partial_filename)
-                    self.index = {}
-                    current_chunk_count = 0
+                    if current_chunk_count >= partial_chunk_size:
+                        partial_counter += 1
+                        partial_filename = f"partial_index_{partial_counter}.txt"
+                        print(f"Creating partial index {partial_counter} with {current_chunk_count} documents")
+                        self._write_partial_index(partial_filename)
+                        self.index = {}
+                        current_chunk_count = 0
 
-        # Handle any remaining documents
+        # Handle remaining documents
         if current_chunk_count > 0:
             partial_counter += 1
             partial_filename = f"partial_index_{partial_counter}.txt"
