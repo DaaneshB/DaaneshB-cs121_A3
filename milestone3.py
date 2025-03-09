@@ -104,35 +104,47 @@ def build_index():
 
 def main():
     """
-    Modified main function to handle ranking scores
+    Optional: Build index
+    Comment out this section if index is already built
     """
+    BUILD_INDEX = False  # Set to True to build index
+    if BUILD_INDEX:
+        print("Building index...")
+        indexer = InvertedIndex()
+        corpus_directory = "path/to/your/DEV/folder"  # Update this path
+        indexer.build_index_from_corpus(corpus_directory, partial_chunk_size=1000)
+        print("Index building complete.")
+    
+    # Load index and build auxiliary dictionary
     start = time.time()
     index_file = "final_index.txt"
     
-    # Load main index
-    index = search.load_index(index_file)
+    print("Building auxiliary dictionary...")
+    aux_dict = search.build_auxiliary_dictionary(index_file)
     
     # Load ranking scores
-    scores_data = search.load_scores("final")  # Load scores from final merged index
+    print("Loading ranking scores...")
+    scores_data = search.load_scores("final")
     
     end = time.time()
-    print(f"Index and scores loaded in {end - start:.5f} seconds")
+    print(f"Auxiliary dictionary and scores loaded in {end - start:.5f} seconds")
     
-    # Process queries with enhanced scoring
+    # Process test queries
     print("\nProcessing good queries...")
     for query in good_queries:
-        search_helper(index, query, scores_data)
+        search_helper(aux_dict, query, index_file, scores_data)
     
     print("\nProcessing bad queries...")
     for query in bad_queries:
-        search_helper(index, query, scores_data)
-
-        
+        search_helper(aux_dict, query, index_file, scores_data)
+    
+    # Optional: Interactive mode
+    while True:
+        query = input("\nEnter query (or 'quit' to exit): ").strip()
+        if query.lower() == 'quit':
+            break
+        if query:
+            search_helper(aux_dict, query, index_file, scores_data)
 
 if __name__ == "__main__":
     main()
-
-    
-    
-    
-    
