@@ -25,17 +25,102 @@ def nltk_tokenize(text: str) -> List[str]:
 
 class InvertedIndex:
     def __init__(self):
-        # The inverted index maps each stemmed token to a list of postings.
-        # Each posting is a tuple: (document_id, term_frequency).
         self.index: Dict[str, List[Tuple[str, int]]] = {}
         self.num_documents = 0
         self.stemmer = PorterStemmer()
+        
+        # Initialize enhanced features
+        self.simhasher = EnhancedSimHash(
+            hash_bits=64,
+            ngram_range=(1, 3),
+            threshold=0.8
+        )
+        self.link_analyzer = LinkAnalyzer()
+        self.document_hashes = {}
+        
+        # Ranking scores
+        self.pagerank_scores = {}
+        self.hub_scores = {}
+        self.auth_scores = {}
+
+    def index_document(self, doc_id: str, html_content: str):
+        """
+        Process a single document: extract text, tokenize, stem, update index.
+        Now includes position tracking and HTML structure awareness.
+        """
+        soup = BeautifulSoup(html_content, 'html.parser')
+        
+        # Extract features using SimHash's feature extraction
+        features = self.simhasher._extract_features(soup)
+        
+        # Process each feature type with position information
+        for feature_type, tokens in features.items():
+            weight_multiplier = {
+                'title': 4.0,
+                'headers': 3.0,
+                'meta': 2.0,
+                'content': 1.0
+            }[feature_type]
+            
+            stemmed_tokens = [self.stemmer.stem(token) for token in tokens]
+            
+            # Update index with position and weight information
+            for position, token in enumerate(stemmed_tokens):
+                if token not in self.index:
+                    self.index[token] = []
+                
+                # Store doc_id, frequency, position, and weight
+                position_weight = weight_multiplier * (1.0 / (1 + 0.1 * position))
+                self.index[token].append((doc_id, 1, position, position_weight))
+
+        self.num_documents += 1
+
+    def _process_json_file(self, file_path: str):
+        """Process JSON file with duplicate detection and link analysis"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except UnicodeDecodeError:
+            with open(file_path, 'r', encoding='latin-1') as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"Error reading file {file_path}: {e}")
+            return
+
+        doc_id = data.get('url', file_path)
+        html_content = data.get('content', '')
+
+        if not html_content.strip():
+            print(f"Warning: No content in file {file_path}")
+            return
+
+        # Compute document hash and check for duplicates
+        doc_hash = self.simhasher.compute_document_hash(html_content)
+        
+        is_duplicate = False
+        for existing_id, existing_hash in self.document_hashes.items():
+            similarity = self.simhasher.compute_similarity(doc_hash, existing_hash)
+            if similarity['is_duplicate']:
+                print(f"Duplicate detected: {doc_id} matches {existing_id}")
+                print(f"Similarity score: {similarity['similarity_score']:.3f}")
+                is_duplicate = True
+                break
+
+        if not is_duplicate:
+            # Store hash and process document
+            self.document_hashes[doc_id] = doc_hash
+            print(f"Indexing document: {doc_id}")
+            
+            # Process links and anchor text
+            self.link_analyzer.process_page(doc_id, html_content)
+            
+            # Index the document
+            self.index_document(doc_id, html_content)
 
     def _write_partial_index(self, filename: str):
         """
-        Writes current in-memory index to a text file.
-        Format: token|doc_id1:freq1,doc_id2:freq2,...
-        Ensures proper URL encoding
+        Write current index to file with enhanced information.
+        Format: token|doc_id:freq:pos:weight,doc_id:freq:pos:weight,...
         """
         try:
             with open(filename, 'w', encoding='utf-8') as f:
@@ -43,31 +128,22 @@ class InvertedIndex:
                     if not postings:
                         continue
                     
-                    # Create postings string with proper URL handling
-                    valid_postings = []
-                    for doc_id, freq in postings:
-                        if doc_id and freq > 0:
-                            # Encode the URL if it contains special characters
-                            safe_doc_id = doc_id.replace(':', '%3A')
-                            valid_postings.append(f"{safe_doc_id}:{freq}")
+                    # Create postings string with position and weight info
+                    postings_str = ','.join(
+                        f"{doc_id}:{freq}:{pos}:{weight}"
+                        for doc_id, freq, pos, weight in postings
+                    )
+                    f.write(f"{token}|{postings_str}\n")
                     
-                    if valid_postings:
-                        postings_str = ','.join(valid_postings)
-                        f.write(f"{token}|{postings_str}\n")
-                        
         except Exception as e:
             print(f"Error writing partial index {filename}: {e}")
-                        
-        except Exception as e:
-            print(f"Error writing partial index {filename}: {e}")
-    
+
     def build_index_from_corpus(self, top_level_directory: str, partial_chunk_size: int = 100):
-        """
-        Builds index by processing JSON files and writing partial indexes as txt files.
-        """
+        """Build index with partial writing and link analysis"""
         print(f"Building index from corpus in directory: {top_level_directory}")
         current_chunk_count = 0
         partial_counter = 0
+        current_chunk_documents = []
 
         for domain_folder in os.listdir(top_level_directory):
             domain_path = os.path.join(top_level_directory, domain_folder)
@@ -77,16 +153,19 @@ class InvertedIndex:
             print(f"Processing domain folder: {domain_folder}")
             
             for filename in os.listdir(domain_path):
-                if filename.endswith('.json'):  # Keep looking for JSON files
+                if filename.endswith('.json'):
                     file_path = os.path.join(domain_path, filename)
-                    print(f"Indexing file: {file_path}")
+                    print(f"Processing file: {file_path}")
+                    
+                    # Process the document
                     self._process_json_file(file_path)
                     current_chunk_count += 1
-
+                    
+                    # Check if chunk size reached
                     if current_chunk_count >= partial_chunk_size:
                         partial_counter += 1
                         partial_filename = f"partial_index_{partial_counter}.txt"
-                        print(f"Creating partial index {partial_counter} with {current_chunk_count} documents")
+                        print(f"Writing partial index {partial_counter}")
                         self._write_partial_index(partial_filename)
                         self.index = {}
                         current_chunk_count = 0
@@ -95,104 +174,15 @@ class InvertedIndex:
         if current_chunk_count > 0:
             partial_counter += 1
             partial_filename = f"partial_index_{partial_counter}.txt"
-            print(f"Creating final partial index with {current_chunk_count} documents")
+            print(f"Writing final partial index")
             self._write_partial_index(partial_filename)
             self.index = {}
 
-        print(f"Indexing complete. Created {partial_counter} partial indexes.")
-
-    def index_document(self, doc_id: str, html_content: str):
-        """
-        Extracts visible text from the HTML content, tokenizes, stems, and updates the inverted index.
-        """
-        # Parse HTML to handle broken or malformed tags gracefully
-        soup = BeautifulSoup(html_content, 'html.parser')
-        text = soup.get_text(separator=' ')
+        # Compute link-based scores
+        print("Computing PageRank scores...")
+        self.pagerank_scores = self.link_analyzer.compute_pagerank()
         
-        # Log a snippet of the extracted text
-        print(f"Extracted text from document {doc_id}: {text[:60]}...")
-
-        # Tokenize using NLTK
-        tokens = nltk_tokenize(text)
-        print(f"Tokenized {len(tokens)} tokens from document {doc_id}.")
-
-        # Apply Porter Stemmer to each token
-        stemmed_tokens = [self.stemmer.stem(token) for token in tokens]
-
-        # Calculate term frequency for each stemmed token
-        term_freq: Dict[str, int] = {}
-        for token in stemmed_tokens:
-            term_freq[token] = term_freq.get(token, 0) + 1
-
-        # Update the inverted index
-        for token, freq in term_freq.items():
-            if token not in self.index:
-                self.index[token] = []
-            self.index[token].append((doc_id, freq))
-
-        self.num_documents += 1
-        print(f"Indexed document {doc_id} with {len(term_freq)} unique tokens.")
-
-
-    def _process_json_file(self, file_path: str):
-        """
-        Loads the JSON, extracts 'url' and 'content', and indexes the HTML content.
-        """
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        except UnicodeDecodeError:
-            # If UTF-8 fails, try a different encoding
-            with open(file_path, 'r', encoding='latin-1') as f:
-                data = json.load(f)
-        except Exception as e:
-            print(f"Error reading file {file_path}: {e}")
-            return
-
-        # data should have fields: "url", "content", "encoding"
-        url = data.get('url', file_path)
-        html_content = data.get('content', '')
-
-        # Use the URL or filename as the doc_id
-        doc_id = url
-
-        if not html_content.strip():
-            print(f"Warning: No content in file {file_path}")
-        else:
-            print(f"Indexing document with URL: {doc_id}")
-
-        # Index the document
-        self.index_document(doc_id, html_content)
-
-    def save_index(self, output_file: str):
-        """
-        Saves the inverted index as a JSON file. Posting tuples are converted to lists
-        for JSON serialization.
-        """
-        print(f"Saving inverted index to {output_file}...")
-        serializable_index = {
-            token: [[doc_id, freq] for (doc_id, freq) in postings]
-            for token, postings in self.index.items()
-        }
-        with open(output_file, 'w', encoding='utf-8') as f:
-            json.dump(serializable_index, f, indent=4)
-        print("Inverted index saved.")
-
-if __name__ == '__main__':
-    # Replace with the directory that contains your domain folders
-    corpus_directory = "C:\\Users\\Owner\\Downloads\\developer\\DEV"
-    
-    # Name of the output JSON file
-    output_index_file = "inverted_index_nltk.json"
-
-    print("Starting index build...")
-    # Create the indexer and build the index
-    indexer = InvertedIndex()
-    indexer.build_index_from_corpus(corpus_directory)
-
-    print(f"Number of documents indexed: {indexer.num_documents}")
-    print(f"Number of unique tokens: {len(indexer.index)}")
-
-    # Save the index to a JSON file
-    indexer.save_index(output_index_file)
-    print("Index build complete.")
+        print("Computing HITS scores...")
+        self.hub_scores, self.auth_scores = self.link_analyzer.compute_hits()
+        
+        print(f"Indexing complete. Created {partial_counter} partial indexes.")

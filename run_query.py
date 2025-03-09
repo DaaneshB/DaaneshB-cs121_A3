@@ -1,18 +1,14 @@
-import json
-import nltk
-from nltk.tokenize import word_tokenize
-from nltk.stem import PorterStemmer
-from typing import List, Dict, Tuple
 import time
+import os
+from typing import List, Dict, Tuple
+from collections import defaultdict
+from nltk.stem import PorterStemmer
+import nltk
+from bs4 import BeautifulSoup
+import math
 
-# Download the necessary NLTK data (if not already downloaded)
-nltk.download('punkt')
-
-def nltk_tokenize(text: str):
-    """Tokenizes text into lowercase alphanumeric tokens."""
-    tokens = word_tokenize(text.lower())
-    tokens = [token for token in tokens if token.isalnum()]
-    return tokens
+# Download required NLTK data
+nltk.download('punkt', quiet=True)
 
 def load_index(file_path: str) -> Dict:
     """
@@ -59,7 +55,6 @@ def load_index(file_path: str) -> Dict:
         print(f"Error loading index: {e}")
         return {}
 
-
 def compute_final_score(doc_id: str, basic_score: float, query_terms: List[str], 
                        pagerank_scores: Dict, hub_scores: Dict, 
                        auth_scores: Dict, anchor_texts: Dict) -> float:
@@ -93,15 +88,18 @@ def boolean_search(index: Dict, query: str,
                   pagerank_scores: Dict={}, hub_scores: Dict={}, 
                   auth_scores: Dict={}, anchor_texts: Dict={}) -> Tuple[set, Dict]:
     """
-    Enhanced boolean search with all ranking signals
+    Perform boolean AND search with enhanced scoring
     """
     stemmer = PorterStemmer()
+    
+    # Tokenize and stem query terms
     query_terms = [stemmer.stem(term.lower()) for term in query.split()]
     
     result_docs = None
     basic_scores = {}
     final_scores = {}
     
+    # Process each query term
     for term in query_terms:
         postings = index.get(term, [])
         docs_with_term = {doc_id: freq for doc_id, freq in postings}
@@ -111,6 +109,7 @@ def boolean_search(index: Dict, query: str,
             basic_scores = docs_with_term.copy()
         else:
             result_docs &= set(docs_with_term.keys())
+            # Update scores for remaining docs
             new_scores = {}
             for doc_id in result_docs:
                 if doc_id in docs_with_term:
@@ -134,27 +133,103 @@ def boolean_search(index: Dict, query: str,
             
     return result_docs, final_scores
 
-def main():
-    # This should match the filename you used when saving the index.
-    index_file = "inverted_index_nltk.json"
-    index = load_index(index_file)
-    print("Inverted index loaded successfully.")
+def search_helper(index, query: str, pagerank_scores: Dict={}, 
+                 hub_scores: Dict={}, auth_scores: Dict={}, 
+                 anchor_texts: Dict={}):
+    """
+    Process a single query and display results with enhanced scoring
+    """
+    start_time = time.time()
+    matching_docs, scores = boolean_search(
+        index, query, 
+        pagerank_scores, hub_scores, 
+        auth_scores, anchor_texts
+    )
+    end_time = time.time()
+    elapsed_time = end_time - start_time
     
-    while True:
-        query = input("\nEnter query (or type 'quit' to exit): ")
-        if query.lower() == 'quit':
-            break
+    print(f"\nQuery: '{query}'")
+    if matching_docs:
+        ranked_docs = sorted(matching_docs, key=lambda doc: scores[doc], reverse=True)
+        print(f"Found {len(ranked_docs)} matching document(s) in {elapsed_time:.3f} seconds:")
         
-        matching_docs, scores = boolean_search(index, query)
-       
-        if matching_docs:
-            # Rank the documents by their accumulated score (higher is better)
-            ranked_docs = sorted(matching_docs, key=lambda doc: scores[doc], reverse=True)
-            print(f"\nFound {len(ranked_docs)} matching document(s). Top results:")
-            for doc in ranked_docs[:5]:  # show top 5 results
-                print(f"Document: {doc}, Score: {scores[doc]}")
+        # Display top 5 results with detailed scoring
+        for i, doc in enumerate(ranked_docs[:5], 1):
+            print(f"{i}. Document: {doc}")
+            print(f"   Final Score: {scores[doc]:.3f}")
+            if pagerank_scores:
+                print(f"   PageRank: {pagerank_scores.get(doc, 0):.3f}")
+            if hub_scores:
+                print(f"   Hub Score: {hub_scores.get(doc, 0):.3f}")
+            if auth_scores:
+                print(f"   Authority Score: {auth_scores.get(doc, 0):.3f}")
+            if doc in anchor_texts:
+                print(f"   Anchor texts: {', '.join(anchor_texts[doc][:3])}...")
+    else:
+        print("No matching documents found.")
+
+def run_queries(interactive: bool = False):
+    """
+    Load index and run queries with enhanced scoring
+    """
+    try:
+        # Load the existing index
+        print("Loading index...")
+        start_time = time.time()
+        index = load_index("final_index.txt")
+        end_time = time.time()
+        
+        if not index:
+            print("Error: Failed to load index or index is empty!")
+            return
+            
+        print(f"Index loaded in {end_time - start_time:.2f} seconds")
+        print(f"Index contains {len(index)} unique terms")
+
+        # Initialize empty scoring dictionaries
+        # In practice, these would be loaded from files
+        pagerank_scores = {}
+        hub_scores = {}
+        auth_scores = {}
+        anchor_texts = {}
+
+        if interactive:
+            print("\nEnter queries (type 'quit' to exit):")
+            while True:
+                query = input("\nQuery: ").strip()
+                if query.lower() == 'quit':
+                    break
+                if query:
+                    search_helper(index, query, pagerank_scores, 
+                                hub_scores, auth_scores, anchor_texts)
         else:
-            print("No documents found for the given query.")
+            # Test queries
+            queries = [
+                "machine learning",
+                "donald bren",
+                "computer science",
+                "artificial intelligence",
+                "database systems",
+                "cristina lopes contact info",
+                "ACM club meeting",
+                "masters program",
+                "computing labs printer access",
+                "fall winter spring courses"
+            ]
+            print("\nProcessing test queries...")
+            for query in queries:
+                search_helper(index, query, pagerank_scores, 
+                            hub_scores, auth_scores, anchor_texts)
+
+    except FileNotFoundError:
+        print("Error: final_index.txt not found!")
+        print("Make sure the index file exists in the current directory.")
+    except Exception as e:
+        print(f"Error during search: {e}")
+        raise  # For debugging
 
 if __name__ == "__main__":
-    main()
+    import sys
+    # Run in interactive mode if --interactive flag is provided
+    interactive_mode = "--interactive" in sys.argv
+    run_queries(interactive_mode)
