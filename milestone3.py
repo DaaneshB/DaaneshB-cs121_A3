@@ -61,7 +61,8 @@ def build_index():
     indexer = InvertedIndex()
     
     # Set your corpus directory path
-    corpus_directory = "C:\\Users\\DanBo\\Downloads\\developer\\DEV"
+    #corpus_directory = "C:\\Users\\DanBo\\Downloads\\developer\\DEV"
+    corpus_directory = "C:\\Users\\Owner\\Downloads\\developer\\DEV"
     
     # Build partial indexes (adjust chunk_size as needed)
     print("Building partial indexes...")
@@ -95,10 +96,6 @@ def main():
     print("Inverted index loaded successfully.")
     end = time.time()
     print(f"{end - start: 5f} seconds to load index")
-    for query in good_queries:
-        search_helper(index,query)
-    for query in bad_queries:
-        search_helper(index,query)
         
 
 if __name__ == "__main__":
