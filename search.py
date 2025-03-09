@@ -1,3 +1,6 @@
+from collections import defaultdict
+import json
+import math
 from typing import Dict, List, Tuple
 import nltk
 from nltk.tokenize import word_tokenize
@@ -58,80 +61,134 @@ def load_index(file_path: str) -> Dict:
         print(f"Error loading index: {e}")
         return {}
 
+def compute_tf_idf_score(term_freq: int, doc_freq: int, total_docs: int) -> float:
+    """
+    Compute tf-idf score for a term
+    """
+    if doc_freq == 0:
+        return 0
+    tf = 1 + math.log10(term_freq)  # logarithmic tf
+    idf = math.log10(total_docs / doc_freq)  # inverse document frequency
+    return tf * idf
 
-def compute_final_score(doc_id: str, basic_score: float, query_terms: List[str], 
-                       pagerank_scores: Dict, hub_scores: Dict, 
-                       auth_scores: Dict, anchor_texts: Dict) -> float:
+def load_scores(partial_index_num: str) -> Dict:
     """
-    Combine all ranking signals into a final score
+    Load ranking scores for a partial index
     """
-    # Get link-based scores (default to 0 if not found)
-    pagerank = pagerank_scores.get(doc_id, 0)
-    hub = hub_scores.get(doc_id, 0)
-    auth = auth_scores.get(doc_id, 0)
+    scores_file = f"partial_index_{partial_index_num}_scores.json"
+    try:
+        with open(scores_file, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"No scores file found for partial index {partial_index_num}")
+        return {}
+
+def compute_final_score(doc_id: str, query_terms: List[str], 
+                       tf_idf_score: float, scores_data: Dict) -> Tuple[float, Dict]:
+    """
+    Compute final score combining all ranking signals.
     
-    # Calculate anchor text score
+    Args:
+        doc_id: Document identifier
+        query_terms: List of processed query terms
+        tf_idf_score: Base tf-idf score for the document
+        scores_data: Dictionary containing all ranking data
+        
+    Returns:
+        Tuple of (final_score, score_components)
+    """
+    # Initialize score components
+    score_components = {
+        'tf_idf': tf_idf_score,
+        'pagerank': 0.0,
+        'hub': 0.0,
+        'authority': 0.0,
+        'anchor': 0.0
+    }
+    
+    # Get ranking data
+    pagerank = scores_data.get('pagerank', {})
+    hub_scores = scores_data.get('hub', {})
+    auth_scores = scores_data.get('authority', {})
+    anchor_texts = scores_data.get('anchor_texts', {})
+    
+    # Add link-based scores
+    score_components['pagerank'] = pagerank.get(doc_id, 0)
+    score_components['hub'] = hub_scores.get(doc_id, 0)
+    score_components['authority'] = auth_scores.get(doc_id, 0)
+    
+    # Compute anchor text score
     anchor_score = 0
     doc_anchors = anchor_texts.get(doc_id, [])
     for anchor in doc_anchors:
         matching_terms = sum(1 for term in query_terms if term in anchor.lower())
         anchor_score += matching_terms
+    score_components['anchor'] = anchor_score
     
-    # Combine scores (weights can be adjusted)
+    # Combine all scores with weights
     final_score = (
-        0.4 * basic_score +     # Basic tf-idf
-        0.3 * pagerank +        # PageRank
-        0.1 * hub +            # HITS hub score
-        0.1 * auth +           # HITS authority score
-        0.1 * anchor_score     # Anchor text relevance
+        0.4 * score_components['tf_idf'] +
+        0.3 * score_components['pagerank'] +
+        0.1 * score_components['hub'] +
+        0.1 * score_components['authority'] +
+        0.1 * score_components['anchor']
     )
     
-    return final_score
+    return final_score, score_components
 
-def boolean_search(index: Dict, query: str, 
-                  pagerank_scores: Dict={}, hub_scores: Dict={}, 
-                  auth_scores: Dict={}, anchor_texts: Dict={}) -> Tuple[set, Dict]:
+def boolean_search(index: Dict, query: str, scores_data: Dict) -> Tuple[set, Dict]:
     """
-    Enhanced boolean search with all ranking signals
+    Enhanced boolean search with multiple ranking signals
     """
     stemmer = PorterStemmer()
     query_terms = [stemmer.stem(term.lower()) for term in query.split()]
     
     result_docs = None
-    basic_scores = {}
+    tf_idf_scores = defaultdict(float)
     final_scores = {}
+    score_details = {}
     
+    # Get document frequency data
+    doc_freqs = scores_data.get('doc_frequencies', {})
+    total_docs = scores_data.get('total_docs', 1)
+    
+    # Process each query term
     for term in query_terms:
         postings = index.get(term, [])
         docs_with_term = {doc_id: freq for doc_id, freq in postings}
         
         if result_docs is None:
             result_docs = set(docs_with_term.keys())
-            basic_scores = docs_with_term.copy()
         else:
             result_docs &= set(docs_with_term.keys())
-            new_scores = {}
-            for doc_id in result_docs:
-                if doc_id in docs_with_term:
-                    new_scores[doc_id] = basic_scores[doc_id] + docs_with_term[doc_id]
-            basic_scores = new_scores
             
+        # Early termination if no matches
         if not result_docs:
             return set(), {}
-    
-    # Compute final scores using all ranking signals
-    for doc_id in result_docs:
-        final_scores[doc_id] = compute_final_score(
-            doc_id,
-            basic_scores[doc_id],
-            query_terms,
-            pagerank_scores,
-            hub_scores,
-            auth_scores,
-            anchor_texts
-        )
             
-    return result_docs, final_scores
+        # Update tf-idf scores
+        for doc_id, freq in docs_with_term.items():
+            if doc_id in result_docs:
+                tf_idf = compute_tf_idf_score(freq, doc_freqs.get(term, 0), total_docs)
+                tf_idf_scores[doc_id] += tf_idf
+    
+    # Compute final scores for matching documents
+    for doc_id in result_docs:
+        final_score, components = compute_final_score(
+            doc_id,
+            query_terms,
+            tf_idf_scores[doc_id],
+            scores_data
+        )
+        final_scores[doc_id] = final_score
+        score_details[doc_id] = components
+    
+    return result_docs, score_details
+
+
+
+
+
 
 
 def build_auxiliary_dictionary(index_file_path: str) -> dict:
@@ -215,12 +272,22 @@ def on_demand_boolean_search(query: str, aux_dict: dict, index_file_path: str):
             scores = new_scores
     
     return result_docs, scores
-'''
+
 def main():
+    """
+    Enhanced main function that combines:
+    1. Auxiliary dictionary for efficient disk access
+    2. On-demand boolean search
+    3. Enhanced ranking with multiple signals
+    """
     # Path to the final merged index file
     index_file = "final_index.txt"
     
+    # Load ranking scores
+    scores_data = load_scores("final")  # Load final merged scores
+    
     # Build the auxiliary dictionary
+    print("Building auxiliary dictionary...")
     aux_dict = build_auxiliary_dictionary(index_file)
     print("Auxiliary dictionary built successfully.")
     
@@ -229,31 +296,56 @@ def main():
         if query.lower() == 'quit':
             break
         
-        matching_docs, scores = boolean_search(index, query)
-       
-        if matching_docs:
-            # Rank the documents by their accumulated score (higher is better)
-            ranked_docs = sorted(matching_docs, key=lambda doc: scores[doc], reverse=True)
-            print(f"\nFound {len(ranked_docs)} matching document(s). Top results:")
-            for doc in ranked_docs[:5]:  # show top 5 results
-                print(f"Document: {doc}, Score: {scores[doc]}")
-        else:
-            print("No documents found for the given query.")
-
-
+        # Time the query processing
         query_start = time.time()
-        matching_docs, scores = on_demand_boolean_search(query, aux_dict, index_file)
-        query_end = time.time()
-        elapsed = query_end - query_start
-
+        
+        # Get initial matches using on-demand boolean search
+        matching_docs, basic_scores = on_demand_boolean_search(query, aux_dict, index_file)
+        
         if matching_docs:
-            ranked_docs = sorted(matching_docs, key=lambda d: scores[d], reverse=True)
-            print(f"\nFound {len(ranked_docs)} matching document(s) in {elapsed:.3f} seconds: Top results:")
-            for doc in ranked_docs[:5]:
-                print(f"Document: {doc}, Score: {scores[doc]}")
+            # Enhance scores with additional ranking signals
+            enhanced_scores = {}
+            score_details = {}
+            
+            # Process query terms for anchor text matching
+            stemmer = PorterStemmer()
+            query_terms = [stemmer.stem(term.lower()) for term in query.split()]
+            
+            # Compute enhanced scores for matching documents
+            for doc_id in matching_docs:
+                # Use basic tf score as tf-idf score (simplified)
+                tf_idf_score = basic_scores[doc_id]
+                
+                # Compute final score with all ranking signals
+                final_score, components = compute_final_score(
+                    doc_id,
+                    query_terms,
+                    tf_idf_score,
+                    scores_data
+                )
+                enhanced_scores[doc_id] = final_score
+                score_details[doc_id] = components
+            
+            # Rank documents by enhanced scores
+            ranked_docs = sorted(matching_docs, 
+                               key=lambda d: enhanced_scores[d], 
+                               reverse=True)
+            
+            query_end = time.time()
+            elapsed = query_end - query_start
+            
+            # Display results with detailed scoring
+            print(f"\nFound {len(ranked_docs)} matching document(s) in {elapsed:.3f} seconds:")
+            for i, doc in enumerate(ranked_docs[:5], 1):
+                print(f"\n{i}. Document: {doc}")
+                print(f"   Final Score: {enhanced_scores[doc]:.4f}")
+                print("   Score Components:")
+                for component, value in score_details[doc].items():
+                    print(f"      {component}: {value:.4f}")
         else:
-            print(f"No documents found for the query: {query}")
+            query_end = time.time()
+            elapsed = query_end - query_start
+            print(f"No documents found for the query: {query} ({elapsed:.3f} seconds)")
 
 if __name__ == "__main__":
     main()
-'''

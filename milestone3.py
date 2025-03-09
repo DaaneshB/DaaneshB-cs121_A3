@@ -3,6 +3,8 @@ import time
 from inverted_index import InvertedIndex
 import search
 from merge import merge_partial_indexes
+from typing import List, Dict, Tuple, Set
+
 
 good_queries = [
     "machine learning",
@@ -31,61 +33,33 @@ bad_queries = [
     "internship opportunities"
 ]
 
-def search_helper(index, query: str):
+def search_helper(index, query: str, scores_data: Dict):
     """
-    Process a single query and display results
+    Enhanced search helper with detailed scoring output
     """
     start_time = time.time()
-    matching_docs, scores = search.boolean_search(index, query)
+    matching_docs, scores = search.boolean_search(index, query, scores_data)
     end_time = time.time()
     elapsed_time = end_time - start_time
     
-    print(f"\nQuery: '{query}'")
     if matching_docs:
-        # Rank documents by score
         ranked_docs = sorted(matching_docs, key=lambda doc: scores[doc], reverse=True)
+        print(f"\nQuery: '{query}'")
         print(f"Found {len(ranked_docs)} matching document(s) in {elapsed_time:.3f} seconds:")
         
-        # Display top 5 results
-        for i, doc in enumerate(ranked_docs[:5], 1):
-            print(f"{i}. Document: {doc}")
-            print(f"   Score: {scores[doc]:.3f}")
-    else:
-        print("No matching documents found.")
-
-def build_index():
-    """
-    Build the index using partial indexing and enhanced features
-    """
-    start_time = time.time()
-    
-    # Initialize indexer with enhanced features
-    indexer = InvertedIndex()
-    
-    # Set corpus directory
-    corpus_directory = "C:\\Users\\DanBo\\Downloads\\developer\\DEV"
-    
-    # Build partial indexes (with enhanced features)
-    print("Building partial indexes...")
-    indexer.build_index_from_corpus(corpus_directory, partial_chunk_size=100)
-
-
- # End timer
-def search_helper(index, query):
-    start_time = time.time()  # Start timer
-    matching_docs, scores = search.boolean_search(index, query)
-    end_time = time.time()
-    elapsed_time = end_time - start_time  # Calculate elapsed time 
-    if matching_docs:
-        # Rank the documents by their accumulated score (higher is better)
-        ranked_docs = sorted(matching_docs, key=lambda doc: scores[doc], reverse=True)
-        
-        print(f"\nFound {len(ranked_docs)} matching document(s) in {elapsed_time: .3f} seconds: Top results:")
-        for doc in ranked_docs[:5]:  # show top 5 results
-            print(f"Document: {doc}, Score: {scores[doc]}")
+        # Show top 5 results with scoring breakdown
+        for i, doc_id in enumerate(ranked_docs[:5], 1):
+            print(f"\n{i}. Document: {doc_id}")
+            print(f"   Final Score: {scores[doc_id]:.4f}")
+            if isinstance(scores[doc_id], dict):  # If detailed scores available
+                print("   Score Components:")
+                for component, value in scores[doc_id].items():
+                    print(f"      {component}: {value:.4f}")
     else:
         print(f"\nQuery: '{query}'")
-        print("No documents found for the given query.")
+        print("No matching documents found.")
+
+
 
 def build_index():
     """
@@ -129,25 +103,29 @@ def build_index():
 
 
 def main():
-    # Build the enhanced index
-    print("Starting index building process...")
-    final_index_file, indexer = build_index()
-    
-    # Load the index for searching
+    """
+    Modified main function to handle ranking scores
+    """
     start = time.time()
-    index = search.load_index(final_index_file)
-    end = time.time()
-    print(f"Loaded index in {end - start:.5f} seconds")
+    index_file = "final_index.txt"
     
-    # Process queries
+    # Load main index
+    index = search.load_index(index_file)
+    
+    # Load ranking scores
+    scores_data = search.load_scores("final")  # Load scores from final merged index
+    
+    end = time.time()
+    print(f"Index and scores loaded in {end - start:.5f} seconds")
+    
+    # Process queries with enhanced scoring
     print("\nProcessing good queries...")
     for query in good_queries:
-        search_helper(index, indexer, query)
+        search_helper(index, query, scores_data)
     
     print("\nProcessing bad queries...")
     for query in bad_queries:
-        search_helper(index, indexer, query)
-    return final_index_file
+        search_helper(index, query, scores_data)
 
         
 

@@ -88,3 +88,58 @@ def merge_partial_indexes(partial_files: List[str], final_output: str):
     print(f"Processed tokens: {processed_tokens}")
     print(f"Processed postings: {processed_postings}")
     print(f"Final unique tokens: {len(merged_index)}")
+
+def merge_ranking_scores(partial_files: List[str]) -> Dict:
+    """
+    Merge ranking scores from partial indexes
+    """
+    merged_scores = {
+        'pagerank': {},
+        'hub': {},
+        'authority': {},
+        'anchor_texts': defaultdict(list),
+        'doc_frequencies': defaultdict(int),
+        'doc_lengths': {},
+        'total_docs': 0
+    }
+    
+    # Process each partial index's scores
+    for partial_file in partial_files:
+        partial_num = partial_file.split('_')[2].split('.')[0]
+        scores = load_scores(partial_num)
+        
+        # Merge PageRank scores (take max)
+        for doc_id, score in scores.get('pagerank', {}).items():
+            merged_scores['pagerank'][doc_id] = max(
+                merged_scores['pagerank'].get(doc_id, 0),
+                score
+            )
+        
+        # Merge HITS scores (take max)
+        for doc_id, score in scores.get('hub', {}).items():
+            merged_scores['hub'][doc_id] = max(
+                merged_scores['hub'].get(doc_id, 0),
+                score
+            )
+        for doc_id, score in scores.get('authority', {}).items():
+            merged_scores['authority'][doc_id] = max(
+                merged_scores['authority'].get(doc_id, 0),
+                score
+            )
+        
+        # Merge anchor texts (combine lists)
+        for doc_id, anchors in scores.get('anchor_texts', {}).items():
+            merged_scores['anchor_texts'][doc_id].extend(anchors)
+        
+        # Update document frequencies and lengths
+        for term, freq in scores.get('doc_frequencies', {}).items():
+            merged_scores['doc_frequencies'][term] += freq
+        
+        merged_scores['doc_lengths'].update(scores.get('doc_lengths', {}))
+        merged_scores['total_docs'] += scores.get('total_docs', 0)
+    
+    # Save merged scores
+    with open('final_index_scores.json', 'w') as f:
+        json.dump(merged_scores, f)
+    
+    return merged_scores

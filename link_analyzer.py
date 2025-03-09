@@ -67,24 +67,3 @@ class LinkAnalyzer:
                             for url, score in new_hub.items()}
             
         return hub_scores, auth_scores
-
-class InvertedIndex:
-    def __init__(self):
-        self.link_analyzer = LinkAnalyzer()
-        self.pagerank_scores = {}
-        self.hub_scores = {}
-        self.auth_scores = {}
-        
-    def index_document(self, doc_id: str, html_content: str):
-        # Existing indexing code...
-        
-        # Process links and anchor text
-        self.link_analyzer.process_page(doc_id, html_content)
-        
-    def compute_link_scores(self):
-        """Compute all link-based scores"""
-        print("Computing PageRank scores...")
-        self.pagerank_scores = self.link_analyzer.compute_pagerank()
-        
-        print("Computing HITS scores...")
-        self.hub_scores, self.auth_scores = self.link_analyzer.compute_hits()
