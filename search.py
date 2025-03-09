@@ -1,14 +1,7 @@
-<<<<<<< HEAD
-import json
+from typing import Dict, List, Tuple
 import nltk
 from nltk.tokenize import word_tokenize
 from nltk.stem import PorterStemmer
-from typing import List, Dict, Tuple
-=======
-import nltk
-from nltk.tokenize import word_tokenize
-from nltk.stem import PorterStemmer
->>>>>>> 10a6a80a4ee2ef4ebbed818d4bfae349507adb95
 import time
 
 # Download the necessary NLTK data (if not already downloaded)
@@ -20,7 +13,6 @@ def nltk_tokenize(text: str):
     tokens = [token for token in tokens if token.isalnum()]
     return tokens
 
-<<<<<<< HEAD
 def load_index(file_path: str) -> Dict:
     """
     Load index from text file format: token|doc1:freq1,doc2:freq2,...
@@ -146,7 +138,6 @@ def main():
     index_file = "inverted_index_nltk.json"
     index = load_index(index_file)
     print("Inverted index loaded successfully.")
-=======
 def build_auxiliary_dictionary(index_file_path: str) -> dict:
     """
     Builds an auxiliary term dictionary from a final inverted index file.
@@ -236,13 +227,11 @@ def main():
     # Build the auxiliary dictionary
     aux_dict = build_auxiliary_dictionary(index_file)
     print("Auxiliary dictionary built successfully.")
->>>>>>> 10a6a80a4ee2ef4ebbed818d4bfae349507adb95
     
     while True:
         query = input("\nEnter query (or type 'quit' to exit): ")
         if query.lower() == 'quit':
             break
-<<<<<<< HEAD
         
         matching_docs, scores = boolean_search(index, query)
        
@@ -254,7 +243,6 @@ def main():
                 print(f"Document: {doc}, Score: {scores[doc]}")
         else:
             print("No documents found for the given query.")
-=======
         query_start = time.time()
         matching_docs, scores = on_demand_boolean_search(query, aux_dict, index_file)
         query_end = time.time()
@@ -266,7 +254,6 @@ def main():
                 print(f"Document: {doc}, Score: {scores[doc]}")
         else:
             print(f"No documents found for the query: {query}")
->>>>>>> 10a6a80a4ee2ef4ebbed818d4bfae349507adb95
 
 if __name__ == "__main__":
     main()

@@ -31,7 +31,6 @@ bad_queries = [
     "internship opportunities"
 ]
 
-<<<<<<< HEAD
 def search_helper(index, query: str):
     """
     Process a single query and display results
@@ -150,13 +149,6 @@ def main():
         search_helper(index, indexer, query)
     return final_index_file
 
-def main():
-    start = time.time()
-    index_file = build_index()
-    index = search.load_index(index_file)
-    print("Inverted index loaded successfully.")
-    end = time.time()
-    print(f"{end - start: 5f} seconds to load index")
         
 
 if __name__ == "__main__":
