@@ -133,11 +133,7 @@ def boolean_search(index: Dict, query: str,
             
     return result_docs, final_scores
 
-def main():
-    # This should match the filename you used when saving the index.
-    index_file = "inverted_index_nltk.json"
-    index = load_index(index_file)
-    print("Inverted index loaded successfully.")
+
 def build_auxiliary_dictionary(index_file_path: str) -> dict:
     """
     Builds an auxiliary term dictionary from a final inverted index file.
@@ -219,7 +215,7 @@ def on_demand_boolean_search(query: str, aux_dict: dict, index_file_path: str):
             scores = new_scores
     
     return result_docs, scores
-
+'''
 def main():
     # Path to the final merged index file
     index_file = "final_index.txt"
@@ -243,10 +239,13 @@ def main():
                 print(f"Document: {doc}, Score: {scores[doc]}")
         else:
             print("No documents found for the given query.")
+
+
         query_start = time.time()
         matching_docs, scores = on_demand_boolean_search(query, aux_dict, index_file)
         query_end = time.time()
         elapsed = query_end - query_start
+
         if matching_docs:
             ranked_docs = sorted(matching_docs, key=lambda d: scores[d], reverse=True)
             print(f"\nFound {len(ranked_docs)} matching document(s) in {elapsed:.3f} seconds: Top results:")
@@ -257,3 +256,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+'''

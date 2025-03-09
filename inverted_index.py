@@ -61,7 +61,7 @@ class InvertedIndex:
         except Exception as e:
             print(f"Error writing partial index {filename}: {e}")
     
-    def build_index_from_corpus(self, top_level_directory: str, partial_chunk_size: int = 100):
+    def build_index_from_corpus(self, top_level_directory: str, partial_chunk_size: int = 1000):
         """
         Builds index by processing JSON files and writing partial indexes as txt files.
         """
@@ -181,6 +181,10 @@ class InvertedIndex:
 if __name__ == '__main__':
     # Replace with the directory that contains your domain folders
     corpus_directory = "C:\\Users\\Owner\\Downloads\\developer\\DEV"
+
+    #Run for Daanesh
+    corpus_directory = "C:\\Users\\DanBo\\Downloads\\developer\\DEV"
+
     
     # Name of the output JSON file
     output_index_file = "inverted_index_nltk.json"

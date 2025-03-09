@@ -63,7 +63,7 @@ def build_index():
     indexer = InvertedIndex()
     
     # Set corpus directory
-    corpus_directory = "C:\\Users\\Owner\\Downloads\\developer\\DEV"
+    corpus_directory = "C:\\Users\\DanBo\\Downloads\\developer\\DEV"
     
     # Build partial indexes (with enhanced features)
     print("Building partial indexes...")
@@ -98,8 +98,8 @@ def build_index():
     indexer = InvertedIndex()
     
     # Set your corpus directory path
-    #corpus_directory = "C:\\Users\\DanBo\\Downloads\\developer\\DEV"
-    corpus_directory = "C:\\Users\\Owner\\Downloads\\developer\\DEV"
+    corpus_directory = "C:\\Users\\DanBo\\Downloads\\developer\\DEV"
+    #corpus_directory = "C:\\Users\\Owner\\Downloads\\developer\\DEV"
     
     # Build partial indexes (adjust chunk_size as needed)
     print("Building partial indexes...")

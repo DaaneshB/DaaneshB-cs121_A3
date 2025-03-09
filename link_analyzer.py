@@ -70,7 +70,6 @@ class LinkAnalyzer:
 
 class InvertedIndex:
     def __init__(self):
-        # Existing initializations...
         self.link_analyzer = LinkAnalyzer()
         self.pagerank_scores = {}
         self.hub_scores = {}
