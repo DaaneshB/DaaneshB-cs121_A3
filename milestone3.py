@@ -107,11 +107,11 @@ def main():
     Optional: Build index
     Comment out this section if index is already built
     """
-    BUILD_INDEX = False  # Set to True to build index
+    BUILD_INDEX = True  # Set to True to build index
     if BUILD_INDEX:
         print("Building index...")
         indexer = InvertedIndex()
-        corpus_directory = "path/to/your/DEV/folder"  # Update this path
+        corpus_directory = "C:\\Users\\DanBo\\Downloads\\developer\\DEV"
         indexer.build_index_from_corpus(corpus_directory, partial_chunk_size=1000)
         print("Index building complete.")
     

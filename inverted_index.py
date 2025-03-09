@@ -191,11 +191,30 @@ class InvertedIndex:
 
 
     def _extract_text(self, element, weight: float) -> List[Tuple[str, float]]:
-        """Extract text with weight from HTML element"""
+        """
+        Extract text with weight from HTML element or string
+        """
         if not element:
             return []
-        tokens = nltk_tokenize(element.get_text())
+        
+        # If element is already a string, use it directly
+        if isinstance(element, str):
+            text = element
+        else:
+            # If it's a BeautifulSoup element, get its text
+            text = element.get_text()
+        
+        tokens = nltk_tokenize(text)
         return [(token, weight) for token in tokens]
+
+    def _extract_meta(self, soup: BeautifulSoup, weight: float) -> List[Tuple[str, float]]:
+        """Extract text from meta tags"""
+        meta = []
+        for tag in soup.find_all('meta', {'name': ['description', 'keywords']}):
+            if 'content' in tag.attrs:
+                # Pass the content string directly
+                meta.extend(self._extract_text(tag['content'], weight))
+        return meta
 
     def _extract_headers(self, soup: BeautifulSoup, weight: float) -> List[Tuple[str, float]]:
         """Extract text from header tags"""
@@ -203,14 +222,6 @@ class InvertedIndex:
         for tag in soup.find_all(['h1', 'h2', 'h3']):
             headers.extend(self._extract_text(tag, weight))
         return headers
-
-    def _extract_meta(self, soup: BeautifulSoup, weight: float) -> List[Tuple[str, float]]:
-        """Extract text from meta tags"""
-        meta = []
-        for tag in soup.find_all('meta', {'name': ['description', 'keywords']}):
-            if 'content' in tag.attrs:
-                meta.extend(self._extract_text(tag['content'], weight))
-        return meta
 
     def _extract_content(self, soup: BeautifulSoup, weight: float) -> List[Tuple[str, float]]:
         """Extract main content text"""
