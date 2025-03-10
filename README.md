@@ -17,14 +17,18 @@ The indexer will:
 
 ## Running Search Interface
 
-1. Start search engine:
-   $ python src/search.py --index_dir ./index
+1. Start flask server:
+   $ python app.py
 
-2. Enter queries at the prompt:
+3. Start search engine:
+   cd search-engine
+   $ npm run start
+
+4. Enter queries at the prompt:
 
    > Enter search query: machine learning
 
-3. View ranked results of matching document URLs
+5. View ranked results of matching document URLs
 
 ## Query Processing
 
