@@ -136,43 +136,37 @@ class InvertedIndex:
             
         return dot_product / (norm1 * norm2)
     
-    def index_document(self, doc_id: str, html_content: str, weighted_features: Dict = None):
+    def index_document(self, doc_id: str, html_content: str):
         """
-        Index a document with essential features only
+        Basic indexing with no duplicate detection
         """
-        print(f"Indexing document: {doc_id}")
-        
         soup = BeautifulSoup(html_content, 'html.parser')
+        text = soup.get_text(separator=' ')
         
-        # Get features if not provided
-        if weighted_features is None:
-            features = self.simhasher._extract_features(soup)
-            weighted_features = self.simhasher._compute_feature_weights(features)
+        # Process tokens
+        tokens = word_tokenize(text.lower())
+        stemmed_tokens = [self.stemmer.stem(token) for token in tokens if token.isalnum()]
         
-        try:
-            # Process each token with its weight
-            for token, weight in weighted_features.items():
-                stemmed_token = self.stemmer.stem(token.lower())
-                
-                # Update inverted index with weight
-                if stemmed_token not in self.index:
-                    self.index[stemmed_token] = []
-                self.index[stemmed_token].append((doc_id, weight))
-                
-                # Update document frequency
-                if stemmed_token not in self.doc_frequencies:
-                    self.doc_frequencies[stemmed_token] = 0
-                self.doc_frequencies[stemmed_token] += 1
+        # Count term frequencies
+        term_freq = defaultdict(int)
+        for token in stemmed_tokens:
+            term_freq[token] += 1
+        
+        # Update index
+        for token, freq in term_freq.items():
+            if token not in self.index:
+                self.index[token] = []
+            self.index[token].append((doc_id, freq))
             
-            # Process links
-            self.link_analyzer.process_page(doc_id, html_content)
-            
-            # Update document count
-            self.num_documents += 1
-            
-        except Exception as e:
-            print(f"Error processing document {doc_id}: {str(e)}")
-
+            # Update document frequency
+            if token not in self.doc_frequencies:
+                self.doc_frequencies[token] = 0
+            self.doc_frequencies[token] += 1
+        
+        # Process links (keep this for PageRank)
+        self.link_analyzer.process_page(doc_id, html_content)
+        
+        self.num_documents += 1
 
 
 
@@ -333,28 +327,16 @@ class InvertedIndex:
         except Exception as e:
             print(f"Error writing scores file {scores_filename}: {e}")
 
-    def build_index_from_corpus(self, top_level_directory: str, partial_chunk_size: int = 1000):
+    def build_index_from_corpus(self, top_level_directory: str, partial_chunk_size: int = 2000):
         """
-        Build index with essential features only (no positions or n-grams)
+        Build index 
         """
         print(f"\nBuilding index from corpus in directory: {top_level_directory}")
         
         # Initialize counters
         current_chunk_count = 0
         partial_counter = 0
-        stats = {
-            'total_docs_seen': 0,
-            'docs_indexed': 0,
-            'duplicates_excluded': 0,
-            'exact_duplicates': 0,
-            'near_duplicates': 0,
-            'unique_terms': set(),
-            'links_processed': 0,
-            'anchor_texts_found': 0
-        }
-
-        # Track duplicates
-        self.document_hashes = {}  # doc_id -> SimHash
+        total_docs = 0
 
         for domain_folder in os.listdir(top_level_directory):
             domain_path = os.path.join(top_level_directory, domain_folder)
@@ -368,7 +350,6 @@ class InvertedIndex:
                     continue
                     
                 file_path = os.path.join(domain_path, filename)
-                stats['total_docs_seen'] += 1
                 
                 try:
                     # Load document
@@ -379,61 +360,19 @@ class InvertedIndex:
                     html_content = data.get('content', '')
                     
                     if not html_content.strip():
-                        print(f"Warning: Empty content in {file_path}")
                         continue
-                    
-                    # Check for duplicates
-                    doc_hash = self.simhasher.compute_document_hash(html_content)
-                    is_duplicate = False
-                    
-                    for existing_id, existing_hash in self.document_hashes.items():
-                        similarity = self.simhasher.compute_similarity(doc_hash, existing_hash)
-                        if similarity['is_duplicate']:
-                            stats['duplicates_excluded'] += 1
-                            if similarity['similarity_score'] == 1.0:
-                                stats['exact_duplicates'] += 1
-                                print(f"Exact duplicate found: {doc_id} matches {existing_id}")
-                            else:
-                                stats['near_duplicates'] += 1
-                                print(f"Near duplicate found: {doc_id} matches {existing_id}")
-                                print(f"Similarity score: {similarity['similarity_score']:.3f}")
-                            is_duplicate = True
-                            break
-                    
-                    if is_duplicate:
-                        continue
-                    
-                    # Process non-duplicate document
-                    self.document_hashes[doc_id] = doc_hash
-                    
+
                     # Index the document
-                    initial_terms = len(self.index)
-                    initial_links = len(self.link_analyzer.graph)
-                    initial_anchors = sum(len(anchors) for anchors in self.link_analyzer.anchor_texts.values())
-                    
                     self.index_document(doc_id, html_content)
-                    
-                    # Update statistics
-                    stats['docs_indexed'] += 1
-                    stats['unique_terms'].update(self.index.keys())
-                    stats['links_processed'] += len(self.link_analyzer.graph) - initial_links
-                    stats['anchor_texts_found'] += (
-                        sum(len(anchors) for anchors in self.link_analyzer.anchor_texts.values()) - 
-                        initial_anchors
-                    )
-                    
+                    total_docs += 1
                     current_chunk_count += 1
                     
                     # Check if chunk size reached
                     if current_chunk_count >= partial_chunk_size:
                         partial_counter += 1
+                        partial_filename = f"partial_index_{partial_counter}.txt"
                         
                         # Write partial index
-                        partial_filename = f"partial_index_{partial_counter}.txt"
-                        print(f"\nWriting partial index {partial_counter}")
-                        print(f"Documents in chunk: {current_chunk_count}")
-                        print(f"Terms in index: {len(self.index)}")
-                        
                         self._write_partial_index(partial_filename)
                         self._save_partial_scores(partial_counter)
                         
@@ -441,11 +380,7 @@ class InvertedIndex:
                         self.index = {}
                         current_chunk_count = 0
                         
-                        print(f"\nChunk {partial_counter} Statistics:")
-                        print(f"Documents processed: {stats['docs_indexed']}")
-                        print(f"Duplicates found: {stats['duplicates_excluded']}")
-                        print(f"Links processed: {stats['links_processed']}")
-                        print(f"Anchor texts found: {stats['anchor_texts_found']}")
+                        print(f"Chunk {partial_counter} complete ({total_docs} documents processed)")
 
                 except Exception as e:
                     print(f"Error processing {file_path}: {e}")
@@ -455,20 +390,12 @@ class InvertedIndex:
         if current_chunk_count > 0:
             partial_counter += 1
             partial_filename = f"partial_index_{partial_counter}.txt"
-            print(f"\nWriting final partial index")
             self._write_partial_index(partial_filename)
             self._save_partial_scores(partial_counter)
             self.index = {}
 
-        print(f"\nFinal Indexing Statistics:")
-        print(f"Total documents seen: {stats['total_docs_seen']}")
-        print(f"Documents indexed: {stats['docs_indexed']}")
-        print(f"Duplicates excluded: {stats['duplicates_excluded']}")
-        print(f"  - Exact duplicates: {stats['exact_duplicates']}")
-        print(f"  - Near duplicates: {stats['near_duplicates']}")
-        print(f"Unique terms: {len(stats['unique_terms'])}")
-        print(f"Links processed: {stats['links_processed']}")
-        print(f"Anchor texts found: {stats['anchor_texts_found']}")
+        print(f"\nIndexing complete:")
+        print(f"Total documents processed: {total_docs}")
         print(f"Partial indexes created: {partial_counter}")
 
         return partial_counter

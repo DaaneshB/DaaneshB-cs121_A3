@@ -150,7 +150,7 @@ def main():
         
         # Build new index
         indexer = InvertedIndex()
-        indexer.build_index_from_corpus(corpus_directory, partial_chunk_size=10)
+        indexer.build_index_from_corpus(corpus_directory, partial_chunk_size=100)
         
         # Get list of partial index files
         partial_files = sorted(

@@ -6,7 +6,7 @@ from link_analyzer import LinkAnalyzer
 
 def merge_partial_indexes(partial_files: List[str], final_output: str):
     """
-    Merge partial indexes focusing on essential data only
+    Merge partial indexes - simplified version
     """
     print("\nStarting merge process...")
     
@@ -14,17 +14,15 @@ def merge_partial_indexes(partial_files: List[str], final_output: str):
     merged_index = {}
     merged_doc_freqs = defaultdict(int)
     link_graph = defaultdict(list)
-    anchor_texts = defaultdict(list)
-    total_docs = 0
     
     # Process each partial file
     for partial_file in partial_files:
-        print(f"\nProcessing {partial_file}...")
+        print(f"\nProcessing {partial_file}")
         
         try:
             # Process main index
             with open(partial_file, 'r', encoding='utf-8') as f:
-                for line_num, line in enumerate(f, 1):
+                for line in f:
                     line = line.strip()
                     if not line or '|' not in line:
                         continue
@@ -44,7 +42,7 @@ def merge_partial_indexes(partial_files: List[str], final_output: str):
                             
                         try:
                             doc_id, freq_str = posting.rsplit(':', 1)
-                            freq = float(freq_str)  # Handle weighted frequencies
+                            freq = float(freq_str)
                             
                             # Update merged index
                             if doc_id in merged_index[token]:
@@ -54,10 +52,9 @@ def merge_partial_indexes(partial_files: List[str], final_output: str):
                                 merged_doc_freqs[token] += 1
                                 
                         except ValueError:
-                            print(f"Warning: Invalid posting format in {partial_file}, line {line_num}")
                             continue
 
-            # Process scores file
+            # Process scores file (just for link structure)
             scores_file = partial_file.replace('index', 'scores')
             if os.path.exists(scores_file):
                 with open(scores_file, 'r', encoding='utf-8') as f:
@@ -73,38 +70,21 @@ def merge_partial_indexes(partial_files: List[str], final_output: str):
                         record_type = parts[0]
                         
                         if record_type == 'df':
-                            # Document frequency
                             token, freq = parts[1:]
                             merged_doc_freqs[token] += int(freq)
-                            
                         elif record_type == 'link':
-                            # Link structure
                             source, targets = parts[1:]
                             link_graph[source].extend(targets.split(','))
-                            
-                        elif record_type == 'anchor':
-                            # Anchor texts
-                            url, texts = parts[1:]
-                            anchor_texts[url].extend(texts.split(','))
 
         except Exception as e:
             print(f"Error processing {partial_file}: {e}")
             continue
 
-    # Compute final scores
-    print("\nComputing ranking scores...")
-    
-    # Initialize link analyzer
+    # Compute PageRank
+    print("\nComputing PageRank scores...")
     link_analyzer = LinkAnalyzer()
     link_analyzer.graph = {url: list(set(targets)) for url, targets in link_graph.items()}
-    
-    # Compute PageRank
-    print("Computing PageRank scores...")
     pagerank_scores = link_analyzer.compute_pagerank()
-    
-    # Compute HITS
-    print("Computing HITS scores...")
-    hub_scores, auth_scores = link_analyzer.compute_hits()
 
     # Write final merged index
     print("\nWriting final index...")
@@ -116,30 +96,20 @@ def merge_partial_indexes(partial_files: List[str], final_output: str):
                                       for doc_id, freq in postings.items())
                 f.write(f"{token}|{postings_str}\n")
 
-    # Write final scores
+    # Write final scores (just document frequencies and PageRank)
     print("Writing final scores...")
     with open('final_scores.txt', 'w', encoding='utf-8') as f:
         # Write document frequencies
         for token, freq in merged_doc_freqs.items():
             f.write(f"df|{token}|{freq}\n")
         
-        # Write link structure and scores
+        # Write PageRank scores
         for url, score in pagerank_scores.items():
             f.write(f"pr|{url}|{score}\n")
-        for url, score in hub_scores.items():
-            f.write(f"hub|{url}|{score}\n")
-        for url, score in auth_scores.items():
-            f.write(f"auth|{url}|{score}\n")
-        
-        # Write anchor texts (unique only)
-        for url, texts in anchor_texts.items():
-            unique_texts = list(set(texts))
-            f.write(f"anchor|{url}|{','.join(unique_texts)}\n")
 
     print("\nMerge complete!")
     print(f"Processed {len(partial_files)} partial indexes")
     print(f"Final index contains {len(merged_index)} unique terms")
-    print(f"Created {final_output} and final_scores.txt")
 
 if __name__ == "__main__":
     # Get list of partial index files
